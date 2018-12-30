@@ -106,7 +106,7 @@ def deep_rnn_model(input_dim, units, activation, recur_layers, output_dim=29):
     for _ in range(recur_layers-1):
         simp_rnn = GRU(units, activation=activation,
                        return_sequences=True, implementation=2, name='rnn')(bn_rnn)
-        bn_rnn = BatchNormalization(simp_rnn)
+        bn_rnn = BatchNormalization()(simp_rnn)
     # TODO: Add a TimeDistributed(Dense(output_dim)) layer
     time_dense = TimeDistributed(Dense(output_dim))(bn_rnn)
     # Add softmax activation layer
