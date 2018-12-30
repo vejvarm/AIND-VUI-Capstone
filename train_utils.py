@@ -9,7 +9,7 @@ from keras import backend as K
 from keras.models import Model
 from keras.layers import (Input, Lambda)
 from keras.optimizers import SGD
-from keras.callbacks import ModelCheckpoint   
+from keras.callbacks import ModelCheckpoint, EarlyStopping
 import os
 
 def ctc_lambda_func(args):
@@ -41,7 +41,9 @@ def train_model(input_to_softmax,
                 epochs=20,
                 verbose=1,
                 sort_by_duration=False,
-                max_duration=10.0):
+                max_duration=10.0,
+                early=False,  # if True, the EarlyStopping callback will be implemented when training
+                patience=5):
     
     # create a class instance for obtaining batches of data
     audio_gen = AudioGenerator(minibatch_size=minibatch_size, 
@@ -70,10 +72,16 @@ def train_model(input_to_softmax,
     # add checkpointer
     checkpointer = ModelCheckpoint(filepath='results/'+save_model_path, verbose=0)
 
+    # student edit: add EarlyStopping callback
+    if early:
+        early_stopping = EarlyStopping(monitor='val_loss', mode='auto', patience=patience)
+    else:
+        early_stopping = None
+
     # train the model
     hist = model.fit_generator(generator=audio_gen.next_train(), steps_per_epoch=steps_per_epoch,
         epochs=epochs, validation_data=audio_gen.next_valid(), validation_steps=validation_steps,
-        callbacks=[checkpointer], verbose=verbose)
+        callbacks=[checkpointer, early_stopping] if early else [checkpointer], verbose=verbose)
 
     # save model loss
     with open('results/'+pickle_path, 'wb') as f:
