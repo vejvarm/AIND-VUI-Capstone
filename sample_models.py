@@ -175,6 +175,7 @@ def final_model(input_dim, conv_layers, filters, kernel_size, conv_stride,
     # Specify the model
     model = Model(inputs=input_data, outputs=y_pred)
     # TODO: Specify model.output_length
-    model.output_length = lambda x: x
+    model.output_length = lambda x: cnn_output_length(
+        x, kernel_size, conv_border_mode, conv_stride)
     print(model.summary())
     return model
