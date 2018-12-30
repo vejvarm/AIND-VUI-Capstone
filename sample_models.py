@@ -100,12 +100,12 @@ def deep_rnn_model(input_dim, units, activation, recur_layers, output_dim=29):
     # TODO: Add recurrent layers, each with batch normalization
     # Add first recurrent layer with batch normalization
     simp_rnn = GRU(units, activation=activation,
-                   return_sequences=True, implementation=2, name='rnn')(input_data)
+                   return_sequences=True, implementation=2, name='rnn-0')(input_data)
     bn_rnn = BatchNormalization()(simp_rnn)
     # Add the rest of the recurrent layers
-    for _ in range(recur_layers-1):
+    for i in range(1, recur_layers):
         simp_rnn = GRU(units, activation=activation,
-                       return_sequences=True, implementation=2, name='rnn')(bn_rnn)
+                       return_sequences=True, implementation=2, name='rnn-' + str(i))(bn_rnn)
         bn_rnn = BatchNormalization()(simp_rnn)
     # TODO: Add a TimeDistributed(Dense(output_dim)) layer
     time_dense = TimeDistributed(Dense(output_dim))(bn_rnn)
