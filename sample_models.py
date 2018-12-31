@@ -182,9 +182,11 @@ def final_model(input_dim, conv_layers, filters, kernel_size, conv_stride,
     # Specify the model
     model = Model(inputs=input_data, outputs=y_pred)
     # TODO: Specify model.output_length
-#    model.output_length = lambda x: final_output_length(conv_layers, x, kernel_size, conv_border_mode, conv_stride)
-    # with dilated convolutions, the input is padded so that the output size is same as the original input size
-    model.output_length = lambda x: x
+    if conv_border_mode == 'valid':
+        model.output_length = lambda x: final_output_length(conv_layers, x, kernel_size, conv_border_mode, conv_stride)
+    elif conv_border_mode == 'casual':
+        # with dilated convolutions, the input is padded so that the output size is same as the original input size
+        model.output_length = lambda x: x
     print(model.summary())
     return model
 
