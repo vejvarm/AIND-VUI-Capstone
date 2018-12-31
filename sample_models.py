@@ -148,6 +148,7 @@ def final_model(input_dim, conv_layers, filters, kernel_size, conv_stride,
                      strides=conv_stride,
                      padding=conv_border_mode,
                      activation='relu',
+                     dilation_rate=1,
                      name='conv1d-0')(input_data)
     # Add the rest of the 1D convolutional layers
     for i in range(1, conv_layers):
@@ -155,6 +156,7 @@ def final_model(input_dim, conv_layers, filters, kernel_size, conv_stride,
                          strides=conv_stride,
                          padding=conv_border_mode,
                          activation='relu',
+                         dilation_rate=2*(i+1) if conv_border_mode == 'casual' else 1,
                          name='conv1d-' + str(i))(conv_1d)
 
     # Add first recurrent layer with batch normalization
