@@ -175,7 +175,19 @@ def final_model(input_dim, conv_layers, filters, kernel_size, conv_stride,
     # Specify the model
     model = Model(inputs=input_data, outputs=y_pred)
     # TODO: Specify model.output_length
-    model.output_length = lambda x: cnn_output_length(
-        x, kernel_size, conv_border_mode, conv_stride)
+    model.output_length = lambda x: final_output_length(conv_layers, x, kernel_size, conv_border_mode, conv_stride)
     print(model.summary())
     return model
+
+
+def final_output_length(conv_layers, input_length, filter_size, border_mode, stride, dilation=1):
+    """ Apply cnn_output_length function conv_layers-times in order to calculate output size when using more
+        convolutional layers
+    """
+
+    output_length = input_length
+
+    for i in range(conv_layers):
+        output_length = cnn_output_length(output_length, filter_size, border_mode, stride, dilation)
+
+    return output_length
