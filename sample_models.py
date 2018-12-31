@@ -140,6 +140,8 @@ def final_model(input_dim, conv_layers, filters, kernel_size, conv_stride,
     conv_border_mode, units, activation, recur_layers, dropout_w=0.0, dropout_u=0.0, output_dim=29):
     """ Build a deep network for speech 
     """
+    dilation = 1
+
     # Main acoustic input
     input_data = Input(name='the_input', shape=(None, input_dim))
     # TODO: Specify the layers in your network
@@ -148,15 +150,16 @@ def final_model(input_dim, conv_layers, filters, kernel_size, conv_stride,
                      strides=conv_stride,
                      padding=conv_border_mode,
                      activation='relu',
-                     dilation_rate=1,
+                     dilation_rate=dilation,
                      name='conv1d-0')(input_data)
     # Add the rest of the 1D convolutional layers
     for i in range(1, conv_layers):
+        dilation *= 2  # dilation is doubled with every layer
         conv_1d = Conv1D(filters, kernel_size,
                          strides=conv_stride,
                          padding=conv_border_mode,
                          activation='relu',
-                         dilation_rate=2*(i+1) if conv_border_mode == 'casual' else 1,
+                         dilation_rate=dilation if conv_border_mode == 'casual' else 1,
                          name='conv1d-' + str(i))(conv_1d)
 
     # Add first recurrent layer with batch normalization
@@ -179,7 +182,9 @@ def final_model(input_dim, conv_layers, filters, kernel_size, conv_stride,
     # Specify the model
     model = Model(inputs=input_data, outputs=y_pred)
     # TODO: Specify model.output_length
-    model.output_length = lambda x: final_output_length(conv_layers, x, kernel_size, conv_border_mode, conv_stride)
+#    model.output_length = lambda x: final_output_length(conv_layers, x, kernel_size, conv_border_mode, conv_stride)
+    # with dilated convolutions, the input is padded so that the output size is same as the original input size
+    model.output_length = lambda x: x
     print(model.summary())
     return model
 
