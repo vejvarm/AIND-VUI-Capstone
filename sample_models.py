@@ -159,7 +159,7 @@ def final_model(input_dim, conv_layers, filters, kernel_size, conv_stride,
                          strides=conv_stride,
                          padding=conv_border_mode,
                          activation='relu',
-                         dilation_rate=dilation if conv_border_mode == 'casual' else 1,
+                         dilation_rate=dilation if conv_border_mode == 'causal' else 1,
                          name='conv1d-' + str(i))(conv_1d)
 
     # Add first recurrent layer with batch normalization
@@ -184,7 +184,7 @@ def final_model(input_dim, conv_layers, filters, kernel_size, conv_stride,
     # TODO: Specify model.output_length
     if conv_border_mode == 'valid':
         model.output_length = lambda x: final_output_length(conv_layers, x, kernel_size, conv_border_mode, conv_stride)
-    elif conv_border_mode == 'casual':
+    else:
         # with dilated convolutions, the input is padded so that the output size is same as the original input size
         model.output_length = lambda x: x
     print(model.summary())
