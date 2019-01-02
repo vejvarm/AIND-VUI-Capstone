@@ -1,7 +1,7 @@
 from keras import backend as K
 from keras.models import Model
-from keras.layers import (BatchNormalization, Conv1D, Dense, Input, 
-    TimeDistributed, Activation, Bidirectional, SimpleRNN, GRU, LSTM)
+from keras.layers import (BatchNormalization, Conv1D, MaxPooling1D, Dense, Input,
+    TimeDistributed, Activation, Bidirectional, SimpleRNN, GRU, LSTM, Dropout)
 
 def simple_rnn_model(input_dim, output_dim=29):
     """ Build a recurrent network for speech 
@@ -136,9 +136,31 @@ def bidirectional_rnn_model(input_dim, units, activation, output_dim=29):
     print(model.summary())
     return model
 
-def final_model(input_dim, conv_layers, filters, kernel_size, conv_stride,
+
+def batch_norm(cur_layer, inp_layer=None):
+    """Return Batch Normalized layer cur_layer connected to previous inp_layer"""
+
+    output = cur_layer(inp_layer)
+    return BatchNormalization()(output)
+
+
+def final_model(input_dim, conv_layers, filters, kernel_size, pooling_size, conv_stride,
     conv_border_mode, units, activation, recur_layers, dropout_w=0.0, dropout_u=0.0, output_dim=29):
-    """ Build a deep network for speech 
+    """ Build a deep network for speech
+    :param input_dim: number of features in each time step of the input (13 for MFCC, 161 for Spectrogram)
+    :param conv_layers: number of 1D convolutional layers followed by Max Pooling
+    :param filters: number of filters in each convolutional layer
+    :param kernel_size: temporal window size of each filter in 1D convolutional layers
+    :param pooling_size: temporal window size and window stride in Max Pooling layer
+    :param conv_stride: stride of the window in 1D convolutional layers (must be 1 when using dilated convolutions)
+    :param conv_border_mode: 'valid' for standard convolution, 'same' for padding to same size as input with zeros,
+    'causal' for dilated convolutions
+    :param units: number of hidden units in recurrent cells
+    :param activation: activation function applied to the output of the RNNs
+    :param recur_layers: number of stacked RNN layers
+    :param dropout_w: RNN layer input dropout
+    :param dropout_u: RNN layer recurrent dropout
+    :param output_dim: number of classes at the output (default: 26 characters + 1 apostrophe, 1 space, 1 blank)
     """
     dilation = 1
 
@@ -152,46 +174,69 @@ def final_model(input_dim, conv_layers, filters, kernel_size, conv_stride,
                      activation='relu',
                      dilation_rate=dilation,
                      name='conv1d-0')(input_data)
+    pool_1d = MaxPooling1D(pool_size=pooling_size)(conv_1d)
     # Add the rest of the 1D convolutional layers
     for i in range(1, conv_layers):
-        dilation *= 2  # dilation is doubled with every layer
+        if conv_border_mode == 'causal':
+            dilation *= 2  # dilation is doubled with every layer
         conv_1d = Conv1D(filters, kernel_size,
                          strides=conv_stride,
                          padding=conv_border_mode,
                          activation='relu',
-                         dilation_rate=dilation if conv_border_mode == 'causal' else 1,
-                         name='conv1d-' + str(i))(conv_1d)
+                         dilation_rate=dilation,
+                         name='conv1d-' + str(i))(pool_1d)
+        pool_1d = MaxPooling1D(pool_size=pooling_size)(conv_1d)
 
     # Add first recurrent layer with batch normalization
-    bidir_rnn = Bidirectional(GRU(units, activation=activation,
-                                  return_sequences=True, implementation=2,
-                                  dropout=dropout_w, recurrent_dropout=dropout_u),
-                              merge_mode='concat', name='birnn-0')(conv_1d)
-    bn_rnn = BatchNormalization()(bidir_rnn)
+    bidir_rnn = batch_norm(Bidirectional(GRU(units, activation=activation,
+                                              return_sequences=True, implementation=2,
+                                              dropout=dropout_w, recurrent_dropout=dropout_u),
+                                         merge_mode='concat', name='birnn-0'),
+                           pool_1d)
     # Add the rest of the recurrent layers with batch normalization
     for i in range(1, recur_layers):
-        bidir_rnn = Bidirectional(GRU(units, activation=activation,
-                                      return_sequences=True, implementation=2,
-                                      dropout=dropout_w, recurrent_dropout=dropout_u),
-                                  merge_mode='concat', name='birnn-' + str(i))(bn_rnn)
-        bn_rnn = BatchNormalization()(bidir_rnn)
+        bidir_rnn = batch_norm(Bidirectional(GRU(units, activation=activation,
+                                                  return_sequences=True, implementation=2,
+                                                  dropout=dropout_w, recurrent_dropout=dropout_u),
+                                             merge_mode='concat', name='birnn-' + str(i)),
+                               bidir_rnn)
     # TODO: Add a TimeDistributed(Dense(output_dim)) layer
-    time_dense = TimeDistributed(Dense(output_dim))(bn_rnn)
+    time_dense = TimeDistributed(Dense(output_dim))(bidir_rnn)
     # TODO: Add softmax activation layer
     y_pred = Activation('softmax', name='softmax')(time_dense)
     # Specify the model
     model = Model(inputs=input_data, outputs=y_pred)
     # TODO: Specify model.output_length
-    if conv_border_mode == 'valid':
-        model.output_length = lambda x: final_output_length(conv_layers, x, kernel_size, conv_border_mode, conv_stride)
-    else:
-        # with dilated convolutions, the input is padded so that the output size is same as the original input size
-        model.output_length = lambda x: x
+    model.output_length = lambda x: final_output_length(conv_layers, x, kernel_size, pooling_size,
+                                                        conv_border_mode, conv_stride)
     print(model.summary())
     return model
 
 
-def final_output_length(conv_layers, input_length, filter_size, border_mode, stride, dilation=1):
+def cnn_pooling_output_length(input_length, filter_size, pooling_size, border_mode, stride,
+                       dilation=1):
+    """ Compute the length of the output sequence after 1D convolution along
+        time. Note that this function is in line with the function used in
+        Convolution1D class from Keras.
+    Params:
+        input_length (int): Length of the input sequence.
+        filter_size (int): Width of the convolution kernel.
+        pooling_size (int): Size of the 1D max pooling layer kernel
+        border_mode (str): Only support `same` or `valid`.
+        stride (int): Stride size used in 1D convolution.
+        dilation (int)
+    """
+    if input_length is None:
+        return None
+    dilated_filter_size = filter_size + (filter_size - 1) * (dilation - 1)
+    if border_mode == 'valid':
+        output_length = (input_length - dilated_filter_size + stride) // stride // pooling_size
+    else:
+        output_length = input_length // pooling_size
+    return output_length
+
+
+def final_output_length(conv_layers, input_length, filter_size, pooling_size, border_mode, stride, dilation=1):
     """ Apply cnn_output_length function conv_layers-times in order to calculate output size when using more
         convolutional layers
     """
@@ -199,6 +244,7 @@ def final_output_length(conv_layers, input_length, filter_size, border_mode, str
     output_length = input_length
 
     for i in range(conv_layers):
-        output_length = cnn_output_length(output_length, filter_size, border_mode, stride, dilation)
+        output_length = cnn_pooling_output_length(output_length, filter_size, pooling_size,
+                                                  border_mode, stride, dilation)
 
     return output_length
