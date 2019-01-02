@@ -6,4 +6,4 @@ __pycache__/
 *.pyc
 *.json
 \.idea/
-\.results/
+results/
